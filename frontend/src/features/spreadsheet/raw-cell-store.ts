@@ -1,3 +1,4 @@
+import { evaluateFormula, isSpreadsheetError } from '@spreadsheet/engine'
 import { defaultCellFormat, type CellFormat } from './cell-format.ts'
 
 export type CellPosition = readonly [column: number, row: number]
@@ -23,6 +24,15 @@ export function createRawCellStore() {
     },
     get(position: CellPosition): string {
       return cells.get(keyOf(position)) ?? ''
+    },
+    getDisplay(position: CellPosition): { text: string; isError: boolean } {
+      const raw = cells.get(keyOf(position)) ?? ''
+      if (!raw.startsWith('=')) return { text: raw, isError: false }
+
+      const value = evaluateFormula(raw)
+      if (isSpreadsheetError(value)) return { text: value.error, isError: true }
+      if (typeof value === 'boolean') return { text: value ? 'TRUE' : 'FALSE', isError: false }
+      return { text: String(value), isError: false }
     },
     set(position: CellPosition, raw: string): boolean {
       const key = keyOf(position)

@@ -29,7 +29,7 @@ export function FormulaBar({ address, raw, onCommit }: FormulaBarProps) {
             event.currentTarget.blur()
           }
         }}
-        placeholder="Enter text or a formula (calculation engine coming later)"
+        placeholder="Enter text or an arithmetic formula, e.g. =1+2*3"
       />
       <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">Apply</button>
     </form>

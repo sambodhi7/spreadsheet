@@ -38,10 +38,11 @@ export function useSpreadsheetGrid() {
 
   const getCellContent = useCallback((position: Item): GridCell => {
     const raw = store.get(position)
+    const display = store.getDisplay(position)
     const format = store.getFormat(position)
     return {
-      kind: GridCellKind.Text, data: raw, displayData: raw, allowOverlay: true,
-      themeOverride: { textDark: format.textColor, bgCell: format.backgroundColor },
+      kind: GridCellKind.Text, data: raw, displayData: display.text, allowOverlay: true,
+      themeOverride: { textDark: display.isError ? '#dc2626' : format.textColor, bgCell: format.backgroundColor },
     }
   }, [store])
 

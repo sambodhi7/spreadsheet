@@ -1,0 +1,25 @@
+ArithmeticFormula {
+  Formula = "=" Expression end
+  Expression = Additive
+  Additive = Multiplicative (addOp Multiplicative)*
+  Multiplicative = Power (multiplyOp Power)*
+  Power = Unary (powerOp Unary)*
+  Unary = unaryOp Unary  -- op
+        | Primary
+  Primary = Call                -- call
+          | number              -- number
+          | "(" Expression ")" -- paren
+
+  Call = identifier "(" Expression ")"
+  identifier = letter alnum*
+
+  addOp = "+" | "-"
+  multiplyOp = "*" | "/"
+  powerOp = "^"
+  unaryOp = "+" | "-"
+
+  number = leadingDotNumber | wholeNumber
+  leadingDotNumber = "." digit+ exponent?
+  wholeNumber = digit+ ("." digit*)? exponent?
+  exponent = ("e" | "E") ("+" | "-")? digit+
+}

@@ -10,12 +10,16 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "generate:grammar": "node scripts/generate-grammar.mjs",
+    "prebuild": "pnpm generate:grammar",
+    "pretest": "pnpm generate:grammar",
+    "pretypecheck": "pnpm generate:grammar",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json"

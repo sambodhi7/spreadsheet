@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm --filter @spreadsheet/engine build && pnpm --filter frontend build",
     "dev": "pnpm --filter frontend dev",
+    "predev": "pnpm --filter @spreadsheet/engine generate:grammar",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm --filter @spreadsheet/engine test",
     "typecheck": "pnpm -r --if-present typecheck"
