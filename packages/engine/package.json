@@ -1,0 +1,30 @@
+{
+  "name": "@spreadsheet/engine",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "ohm-js": "^17.5.0"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

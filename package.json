@@ -1,0 +1,12 @@
+{
+  "name": "spreadsheet-engine-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "build": "pnpm --filter @spreadsheet/engine build && pnpm --filter frontend build",
+    "dev": "pnpm --filter frontend dev",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm --filter @spreadsheet/engine test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  }
+}

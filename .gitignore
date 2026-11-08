@@ -1,2 +1,6 @@
 # Local agent notes and planning artifacts
 /xox/
+
+# Workspace dependencies and package build output
+/node_modules/
+/packages/*/dist/
