@@ -13,6 +13,8 @@ if missing:
     raise ImproperlyConfigured(f"Missing required production settings: {', '.join(missing)}")
 
 DATABASES = {"default": env.db("DATABASE_URL")}  # noqa: F405
+if DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
+    raise ImproperlyConfigured("Production requires a PostgreSQL DATABASE_URL")
 DATABASES["default"].update(CONN_MAX_AGE=60, CONN_HEALTH_CHECKS=True)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

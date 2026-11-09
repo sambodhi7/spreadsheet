@@ -9,4 +9,5 @@ def api_root(_request):
 urlpatterns = [
     path("", api_root, name="api-root"),
     path("auth/", include("apps.users.urls")),
+    path("", include("apps.spreadsheets.urls")),
 ]
