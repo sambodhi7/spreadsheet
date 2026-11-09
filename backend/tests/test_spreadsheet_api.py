@@ -41,6 +41,15 @@ def test_create_workbook_also_creates_initial_sheet(authenticated_client, api_us
 
 
 @pytest.mark.django_db
+def test_authenticated_api_responses_cannot_be_cached(authenticated_client):
+    response = authenticated_client.get(reverse("workbook-list"))
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store, private"
+    assert response.headers["Pragma"] == "no-cache"
+
+
+@pytest.mark.django_db
 def test_user_only_lists_accessible_workbooks(authenticated_client, api_user):
     owned = Workbook.objects.create(owner=api_user, title="Owned")
     other = User.objects.create_user(username="other")
@@ -58,6 +67,58 @@ def test_user_only_lists_accessible_workbooks(authenticated_client, api_user):
     ids = {item["id"] for item in response.json()}
     assert ids == {str(owned.id), str(shared.id)}
     assert str(hidden.id) not in ids
+
+
+@pytest.mark.django_db
+def test_owner_can_rename_workbook_and_sheet(authenticated_client, api_user):
+    workbook = Workbook.objects.create(owner=api_user, title="Old workbook")
+    sheet = Sheet.objects.create(workbook=workbook, name="Old sheet", position=0)
+
+    workbook_response = authenticated_client.patch(
+        reverse("workbook-detail", kwargs={"workbook_id": workbook.id}),
+        data=json.dumps({"title": "Renamed workbook"}),
+        content_type="application/json",
+    )
+    sheet_response = authenticated_client.patch(
+        reverse("sheet-detail", kwargs={"sheet_id": sheet.id}),
+        data=json.dumps({"name": "Renamed sheet"}),
+        content_type="application/json",
+    )
+
+    assert workbook_response.status_code == 200
+    assert workbook_response.json()["title"] == "Renamed workbook"
+    assert sheet_response.status_code == 200
+    assert sheet_response.json()["name"] == "Renamed sheet"
+    workbook.refresh_from_db()
+    sheet.refresh_from_db()
+    assert workbook.title == "Renamed workbook"
+    assert sheet.name == "Renamed sheet"
+
+
+@pytest.mark.django_db
+def test_viewer_cannot_rename_workbook_or_sheet(authenticated_client, api_user):
+    owner = User.objects.create_user(username="rename-owner")
+    workbook = Workbook.objects.create(owner=owner)
+    sheet = Sheet.objects.create(workbook=workbook, name="Sheet 1", position=0)
+    WorkbookPermission.objects.create(
+        workbook=workbook,
+        user=api_user,
+        role=WorkbookPermission.Role.VIEWER,
+    )
+
+    workbook_response = authenticated_client.patch(
+        reverse("workbook-detail", kwargs={"workbook_id": workbook.id}),
+        data=json.dumps({"title": "Not allowed"}),
+        content_type="application/json",
+    )
+    sheet_response = authenticated_client.patch(
+        reverse("sheet-detail", kwargs={"sheet_id": sheet.id}),
+        data=json.dumps({"name": "Not allowed"}),
+        content_type="application/json",
+    )
+
+    assert workbook_response.status_code == 404
+    assert sheet_response.status_code == 404
 
 
 @pytest.mark.django_db

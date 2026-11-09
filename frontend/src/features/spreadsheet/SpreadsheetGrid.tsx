@@ -1,24 +1,27 @@
 import { DataEditor } from '@glideapps/glide-data-grid'
 import '@glideapps/glide-data-grid/dist/index.css'
-import { gridColumns, GRID_ROWS } from './grid-config'
+import { gridColumns } from './grid-config'
 import { useSpreadsheetGrid } from './use-spreadsheet-grid'
 import { FormulaBar } from './FormulaBar'
 import { FormattingToolbar } from './FormattingToolbar'
 import { FormulaCellEditorContext } from './formula-cell-editor-context'
 import { InlineFormulaEditor } from './InlineFormulaEditor'
+import type { SheetSnapshot } from '../spreadsheets/types'
+import { useSheetAutosave } from '../spreadsheets/use-sheet-autosave'
 
-export function SpreadsheetGrid() {
+export function SpreadsheetGrid({ snapshot, readOnly = false }: { snapshot: SheetSnapshot; readOnly?: boolean }) {
+  const { queueChange, retry, status, errorMessage } = useSheetAutosave(snapshot.sheet.id, snapshot.sheet.revision)
   const {
     gridRef, getCellContent, onCellsEdited, drawCell, selection,
     onGridSelectionChange, selected, formulaDraft, beginFormulaEdit,
     changeFormulaDraft, updateFormulaSelection, commitFormula, cancelFormula, applyFormat,
     provideEditor, isOutsideClick, finishCellEdit, formulaCellEditorCallbacks,
     onGridKeyDown, inlineFormulaBounds, formulaCursor,
-  } = useSpreadsheetGrid()
+  } = useSpreadsheetGrid({ initialCells: snapshot.cells, readOnly, onCellChange: queueChange })
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="Spreadsheet editor">
-      <FormattingToolbar format={selected.format} onChange={applyFormat} />
+      <FormattingToolbar format={selected.format} onChange={applyFormat} disabled={readOnly} />
       <FormulaBar
         address={selected.address}
         draft={formulaDraft}
@@ -27,6 +30,7 @@ export function SpreadsheetGrid() {
         onSelectionChange={updateFormulaSelection}
         onCommit={commitFormula}
         onCancel={cancelFormula}
+        readOnly={readOnly}
       />
       <div className="min-h-0 flex-1">
       <FormulaCellEditorContext.Provider value={formulaCellEditorCallbacks}>
@@ -35,7 +39,7 @@ export function SpreadsheetGrid() {
       width="100%"
       height="100%"
       columns={gridColumns}
-      rows={GRID_ROWS}
+      rows={snapshot.sheet.rowCount}
       getCellContent={getCellContent}
       onCellsEdited={onCellsEdited}
       drawCell={drawCell}
@@ -63,7 +67,14 @@ export function SpreadsheetGrid() {
         />
       )}
       </div>
-      <p className="border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-500">Temporary sheet · Refresh clears cells and formatting · Formulas, references, and ranges are supported</p>
+      <div className="flex border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-500">
+        <span>{snapshot.sheet.name} · Formulas, references, and ranges are supported</span>
+        <span className={`ml-auto ${status === 'error' || status === 'conflict' ? 'text-red-600' : ''}`}>
+          {readOnly ? 'View only' : status === 'saved' ? 'Saved' : status === 'pending' ? 'Unsaved changes' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Save conflict' : 'Save failed'}
+          {!readOnly && (status === 'error' || status === 'conflict') && <button className="ml-2 underline" onClick={retry}>Retry</button>}
+        </span>
+      </div>
+      {errorMessage !== null && <p className="border-t border-red-100 bg-red-50 px-4 py-1 text-xs text-red-700" role="alert">{errorMessage} · Your edits are still on this page. Retry before leaving.</p>}
     </section>
   )
 }

@@ -8,6 +8,7 @@ import { createRawCellStore } from './raw-cell-store'
 import type { CellFormat } from './cell-format'
 import { drawMarkdown } from './draw-markdown'
 import { FormulaCellEditor } from './FormulaCellEditor'
+import type { CellChange, PersistedCell } from '../spreadsheets/types'
 import {
   type FormulaCellEditorCallbacks, type FormulaCellEditorController,
 } from './formula-cell-editor-context'
@@ -34,8 +35,14 @@ function referenceForSelection(selection: GridSelection): string | null {
   return start === end ? start : `${start}:${end}`
 }
 
-export function useSpreadsheetGrid() {
-  const [store] = useState(createRawCellStore)
+interface SpreadsheetGridOptions {
+  initialCells: PersistedCell[]
+  readOnly: boolean
+  onCellChange(change: CellChange): void
+}
+
+export function useSpreadsheetGrid({ initialCells, readOnly, onCellChange }: SpreadsheetGridOptions) {
+  const [store] = useState(() => createRawCellStore(initialCells))
   const gridRef = useRef<DataEditorRef>(null)
   const activeCell = useRef<Item>([0, 0])
   const formulaTarget = useRef<Item>([0, 0])
@@ -98,6 +105,7 @@ export function useSpreadsheetGrid() {
   }, [refreshSelected, updateFormulaDraft])
 
   const onGridKeyDown = useCallback<NonNullable<DataEditorProps['onKeyDown']>>((event) => {
+    if (readOnly) return
     if (event.key !== '=' || event.altKey || event.ctrlKey || event.metaKey || event.bounds === undefined) return
     event.cancel()
     event.preventDefault()
@@ -109,7 +117,7 @@ export function useSpreadsheetGrid() {
     referenceSpan.current = null
     updateFormulaDraft('=')
     setInlineFormulaBounds(event.bounds)
-  }, [updateFormulaDraft])
+  }, [readOnly, updateFormulaDraft])
 
   const onCellFormulaChange = useCallback((draft: string, selectionStart: number, selectionEnd: number) => {
     if (!formulaEditing.current) {
@@ -150,9 +158,10 @@ export function useSpreadsheetGrid() {
     const format = store.getFormat(position)
     return {
       kind: GridCellKind.Text, data: raw, displayData: display.text, allowOverlay: true,
+      readonly: readOnly,
       themeOverride: { textDark: display.isError ? '#dc2626' : format.textColor, bgCell: format.backgroundColor },
     }
-  }, [store])
+  }, [store, readOnly])
 
   const drawCell = useCallback<NonNullable<DataEditorProps['drawCell']>>((args, drawContent) => {
     if (store.getFormat([args.col, args.row]).markdown) {
@@ -161,11 +170,13 @@ export function useSpreadsheetGrid() {
   }, [store])
 
   const onCellsEdited = useCallback<NonNullable<DataEditorProps['onCellsEdited']>>((edits) => {
+    if (readOnly) return true
     const changed = new Map<string, { cell: Item }>()
     let activeChanged = false
     for (const { location, value } of edits) {
       if (value.kind === GridCellKind.Text) {
         const changedPositions = store.set(location, value.data)
+        onCellChange(store.getChange(location))
         for (const position of changedPositions) changed.set(`${position[0]}:${position[1]}`, { cell: position })
         activeChanged ||= changedPositions.length > 0
           && location[0] === activeCell.current[0] && location[1] === activeCell.current[1]
@@ -174,22 +185,24 @@ export function useSpreadsheetGrid() {
     if (changed.size) gridRef.current?.updateCells([...changed.values()])
     if (activeChanged) refreshSelected()
     return true
-  }, [store, refreshSelected])
+  }, [store, refreshSelected, readOnly, onCellChange])
 
   const beginFormulaEdit = useCallback(() => {
+    if (readOnly) return
     if (formulaEditing.current) return
     formulaEditing.current = true
     formulaTarget.current = activeCell.current
     referenceSpan.current = null
-  }, [])
+  }, [readOnly])
 
   const changeFormulaDraft = useCallback((draft: string, selectionStart: number, selectionEnd: number) => {
+    if (readOnly) return
     beginFormulaEdit()
     referenceSpan.current = null
     formulaSelection.current = { start: selectionStart, end: selectionEnd }
     setFormulaCursor(selectionEnd)
     updateFormulaDraft(draft)
-  }, [beginFormulaEdit, updateFormulaDraft])
+  }, [beginFormulaEdit, updateFormulaDraft, readOnly])
 
   const updateFormulaSelection = useCallback((selectionStart: number, selectionEnd: number) => {
     formulaSelection.current = { start: selectionStart, end: selectionEnd }
@@ -197,8 +210,10 @@ export function useSpreadsheetGrid() {
   }, [])
 
   const commitFormula = useCallback(() => {
+    if (readOnly) return
     const position = formulaEditing.current ? formulaTarget.current : activeCell.current
     const changed = store.set(position, formulaDraftRef.current)
+    onCellChange(store.getChange(position))
     if (changed.length) gridRef.current?.updateCells(changed.map((cell) => ({ cell })))
     formulaEditing.current = false
     setInlineFormulaBounds(null)
@@ -207,7 +222,7 @@ export function useSpreadsheetGrid() {
     setSelection(selectionAt(position))
     refreshSelected()
     gridRef.current?.focus()
-  }, [store, refreshSelected])
+  }, [store, refreshSelected, readOnly, onCellChange])
 
   const cancelFormula = useCallback(() => {
     const position = formulaEditing.current ? formulaTarget.current : activeCell.current
@@ -234,10 +249,12 @@ export function useSpreadsheetGrid() {
   }, [refreshSelected])
 
   const applyFormat = useCallback((format: Readonly<CellFormat>) => {
+    if (readOnly) return
     store.setFormat(activeCell.current, format)
+    onCellChange(store.getChange(activeCell.current))
     gridRef.current?.updateCells([{ cell: activeCell.current }])
     refreshSelected()
-  }, [store, refreshSelected])
+  }, [store, refreshSelected, readOnly, onCellChange])
 
   return {
     gridRef, getCellContent, onCellsEdited, drawCell, selection,

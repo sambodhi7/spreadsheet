@@ -1,32 +1,50 @@
-# React + TypeScript + Vite
+# Spreadsheet frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React and Vite client for the spreadsheet application.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Copy `.env.example` to `.env.local`, then set the same Google Web OAuth client
+ID used by Django:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```env
+VITE_API_BASE_URL=/api/v1
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Start Django from `backend/`:
+
+```powershell
+uv run python manage.py migrate
+uv run python manage.py runserver localhost:8000
+```
+
+Start the frontend from the repository root:
+
+```powershell
+pnpm dev
+```
+
+Open `http://localhost:5173`. That exact origin must be present in the Google
+OAuth client's Authorized JavaScript origins.
+Vite proxies `/api` to Django on port 8000, so browser requests remain on the
+frontend origin. Production hosting should route `/api` to Django similarly.
+
+## Persistence behavior
+
+- Google credentials are exchanged for a CSRF-protected Django session.
+- The selected sheet is loaded from the snapshot API.
+- Raw values and formats update immediately in the browser.
+- Changes are coalesced by coordinate and saved after 750 ms.
+- Stale sheet revisions stop autosave and require a reload to avoid overwriting
+  another writer's changes.
+
+## Pages
+
+- `/workbooks` lists every accessible workbook and supports inline renaming.
+- `/workbooks/{workbookId}/sheets/{sheetId}` opens a specific sheet and supports
+  workbook and sheet renaming.
+
+Opening and leaving a workbook uses normal document navigation. Both URLs are
+directly reloadable and bookmarkable rather than relying on transient in-memory
+navigation state.

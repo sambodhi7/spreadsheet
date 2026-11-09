@@ -8,8 +8,12 @@ export default defineConfig({
   // Keep this toolchain's optimized modules separate from the old Vite 8 cache.
   cacheDir: 'node_modules/.vite6',
   server: {
-    host: '127.0.0.1',
-    port: 5174,
+    host: 'localhost',
+    port: 5173,
     strictPort: true,
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/health': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+    },
   },
 })

@@ -8,10 +8,11 @@ interface FormulaBarProps {
   onSelectionChange: (selectionStart: number, selectionEnd: number) => void
   onCommit: () => void
   onCancel: () => void
+  readOnly?: boolean
 }
 
 export function FormulaBar({
-  address, draft, onBeginEdit, onChange, onSelectionChange, onCommit, onCancel,
+  address, draft, onBeginEdit, onChange, onSelectionChange, onCommit, onCancel, readOnly = false,
 }: FormulaBarProps) {
   function commit(event: FormEvent) {
     event.preventDefault()
@@ -48,8 +49,9 @@ export function FormulaBar({
           }
         }}
         placeholder="Enter a value or formula, e.g. =SUM(A1:A10)"
+        readOnly={readOnly}
       />
-      <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">Apply</button>
+      <button type="submit" disabled={readOnly} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40">Apply</button>
     </form>
   )
 }

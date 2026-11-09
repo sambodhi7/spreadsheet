@@ -5,10 +5,11 @@ import {
   SpreadsheetEngine,
 } from '@spreadsheet/engine'
 import { defaultCellFormat, type CellFormat } from './cell-format.ts'
+import type { CellChange, PersistedCell } from '../spreadsheets/types.ts'
 
 export type CellPosition = readonly [column: number, row: number]
 
-export function createRawCellStore() {
+export function createRawCellStore(initialCells: PersistedCell[] = []) {
   const engine = new SpreadsheetEngine()
   const formats = new Map<string, Readonly<CellFormat>>()
   const keyOf = ([column, row]: CellPosition) => `${column}:${row}`
@@ -20,6 +21,15 @@ export function createRawCellStore() {
   const positionOf = (address: string): CellPosition | null => {
     const parsed = parseCellAddress(address)
     return parsed.ok ? [parsed.value.column, parsed.value.row] : null
+  }
+
+  for (const cell of initialCells) {
+    const position: CellPosition = [cell.column, cell.row]
+    engine.setCell(addressOf(position), cell.raw)
+    if (cell.format.textColor !== defaultCellFormat.textColor ||
+        cell.format.backgroundColor !== defaultCellFormat.backgroundColor || cell.format.markdown) {
+      formats.set(keyOf(position), { ...cell.format })
+    }
   }
 
   return {
@@ -51,6 +61,12 @@ export function createRawCellStore() {
         const changedPosition = positionOf(address)
         return changedPosition === null ? [] : [changedPosition]
       })
+    },
+    getChange(position: CellPosition): CellChange {
+      return {
+        column: position[0], row: position[1], raw: engine.getRaw(addressOf(position)),
+        format: { ...this.getFormat(position) },
+      }
     },
   }
 }
