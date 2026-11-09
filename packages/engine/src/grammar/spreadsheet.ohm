@@ -1,22 +1,30 @@
 ArithmeticFormula {
   Formula = "=" Expression end
-  Expression = Additive
+  Expression = Comparison
+  Comparison = Additive (comparisonOp Additive)*
   Additive = Multiplicative (addOp Multiplicative)*
   Multiplicative = Power (multiplyOp Power)*
   Power = Unary (powerOp Unary)*
   Unary = unaryOp Unary  -- op
         | Primary
-  Primary = Call                -- call
+  Primary = cellReference       -- cellReference
+          | Call                -- call
+          | boolean             -- boolean
           | number              -- number
           | "(" Expression ")" -- paren
 
-  Call = identifier "(" Expression ")"
+  Call = identifier "(" ArgumentList? ")"
+  ArgumentList = Expression ("," Expression)*
   identifier = letter alnum*
 
   addOp = "+" | "-"
   multiplyOp = "*" | "/"
   powerOp = "^"
+  comparisonOp = "<=" | ">=" | "<>" | "=" | "<" | ">"
   unaryOp = "+" | "-"
+
+  boolean = (caseInsensitive<"true"> | caseInsensitive<"false">) ~alnum
+  cellReference = "$"? letter+ "$"? digit+ ~alnum
 
   number = leadingDotNumber | wholeNumber
   leadingDotNumber = "." digit+ exponent?

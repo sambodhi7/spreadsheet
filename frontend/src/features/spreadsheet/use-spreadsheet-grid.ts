@@ -53,22 +53,25 @@ export function useSpreadsheetGrid() {
   }, [store])
 
   const onCellsEdited = useCallback<NonNullable<DataEditorProps['onCellsEdited']>>((edits) => {
-    const changed: { cell: Item }[] = []
+    const changed = new Map<string, { cell: Item }>()
     let activeChanged = false
     for (const { location, value } of edits) {
-      if (value.kind === GridCellKind.Text && store.set(location, value.data)) {
-        changed.push({ cell: location })
-        activeChanged ||= location[0] === activeCell.current[0] && location[1] === activeCell.current[1]
+      if (value.kind === GridCellKind.Text) {
+        const changedPositions = store.set(location, value.data)
+        for (const position of changedPositions) changed.set(`${position[0]}:${position[1]}`, { cell: position })
+        activeChanged ||= changedPositions.length > 0
+          && location[0] === activeCell.current[0] && location[1] === activeCell.current[1]
       }
     }
-    if (changed.length) gridRef.current?.updateCells(changed)
+    if (changed.size) gridRef.current?.updateCells([...changed.values()])
     if (activeChanged) refreshSelected()
     return true
   }, [store, refreshSelected])
 
   const commitRaw = useCallback((raw: string) => {
     const position = activeCell.current
-    if (store.set(position, raw)) gridRef.current?.updateCells([{ cell: position }])
+    const changed = store.set(position, raw)
+    if (changed.length) gridRef.current?.updateCells(changed.map((cell) => ({ cell })))
     refreshSelected()
     gridRef.current?.focus()
   }, [store, refreshSelected])

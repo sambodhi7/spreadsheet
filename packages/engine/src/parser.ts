@@ -30,9 +30,21 @@ function foldBinary(first: Node, operators: Node, operands: Node): AstNode {
   return left
 }
 
+function callArguments(optionalArguments: Node): readonly AstNode[] {
+  if (optionalArguments.numChildren === 0) return []
+
+  const argumentList = optionalArguments.child(0)
+  const first = astOf(argumentList.child(0))
+  const remainingExpressions = argumentList.child(2).children.map(astOf)
+  return [first, ...remainingExpressions]
+}
+
 const actions: ActionDict<AstNode> = {
   Formula(_equals, expression, _end) {
     return astOf(expression)
+  },
+  Comparison(first, operators, operands) {
+    return foldBinary(first, operators, operands)
   },
   Additive(first, operators, operands) {
     return foldBinary(first, operators, operands)
@@ -60,17 +72,33 @@ const actions: ActionDict<AstNode> = {
       end: this.source.endIdx,
     }
   },
+  Primary_boolean(value) {
+    return {
+      kind: 'boolean',
+      value: value.sourceString.toUpperCase() === 'TRUE',
+      start: this.source.startIdx,
+      end: this.source.endIdx,
+    }
+  },
+  Primary_cellReference(value) {
+    return {
+      kind: 'cellReference',
+      reference: value.sourceString,
+      start: this.source.startIdx,
+      end: this.source.endIdx,
+    }
+  },
   Primary_paren(_open, expression, _close) {
     return astOf(expression)
   },
   Primary_call(call) {
     return astOf(call)
   },
-  Call(name, _open, argument, _close) {
+  Call(name, _open, optionalArguments, _close) {
     return {
       kind: 'call',
       name: name.sourceString,
-      argument: astOf(argument),
+      arguments: callArguments(optionalArguments),
       start: this.source.startIdx,
       end: this.source.endIdx,
     }

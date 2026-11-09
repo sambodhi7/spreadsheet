@@ -7,7 +7,8 @@ export interface SpreadsheetError {
 }
 
 export type CellValue = number | string | boolean | null | SpreadsheetError
+export type ScalarValue = number | string | boolean | null
 
-export function isSpreadsheetError(value: CellValue): value is SpreadsheetError {
+export function isSpreadsheetError(value: unknown): value is SpreadsheetError {
   return typeof value === 'object' && value !== null && 'error' in value
 }

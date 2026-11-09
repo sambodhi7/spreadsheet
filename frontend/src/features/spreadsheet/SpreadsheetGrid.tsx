@@ -33,7 +33,7 @@ export function SpreadsheetGrid() {
       smoothScrollY
     />
       </div>
-      <p className="border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-500">Temporary sheet · Refresh clears cells and formatting · Basic arithmetic formulas are supported</p>
+      <p className="border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-500">Temporary sheet · Refresh clears cells and formatting · Formulas and A1 references are supported</p>
     </section>
   )
 }

@@ -1,13 +1,26 @@
-import { evaluateFormula, isSpreadsheetError } from '@spreadsheet/engine'
+import {
+  addressFromCoordinates,
+  isSpreadsheetError,
+  parseCellAddress,
+  SpreadsheetEngine,
+} from '@spreadsheet/engine'
 import { defaultCellFormat, type CellFormat } from './cell-format.ts'
 
 export type CellPosition = readonly [column: number, row: number]
 
-/** Temporary raw inputs only. Formula interpretation belongs to the future engine. */
 export function createRawCellStore() {
-  const cells = new Map<string, string>()
+  const engine = new SpreadsheetEngine()
   const formats = new Map<string, Readonly<CellFormat>>()
   const keyOf = ([column, row]: CellPosition) => `${column}:${row}`
+  const addressOf = ([column, row]: CellPosition) => {
+    const address = addressFromCoordinates(column, row)
+    if (address === null) throw new RangeError(`Invalid grid position: ${column},${row}`)
+    return address
+  }
+  const positionOf = (address: string): CellPosition | null => {
+    const parsed = parseCellAddress(address)
+    return parsed.ok ? [parsed.value.column, parsed.value.row] : null
+  }
 
   return {
     getFormat(position: CellPosition): Readonly<CellFormat> {
@@ -23,25 +36,21 @@ export function createRawCellStore() {
       }
     },
     get(position: CellPosition): string {
-      return cells.get(keyOf(position)) ?? ''
+      return engine.getRaw(addressOf(position))
     },
     getDisplay(position: CellPosition): { text: string; isError: boolean } {
-      const raw = cells.get(keyOf(position)) ?? ''
-      if (!raw.startsWith('=')) return { text: raw, isError: false }
-
-      const value = evaluateFormula(raw)
+      const value = engine.getValue(addressOf(position))
       if (isSpreadsheetError(value)) return { text: value.error, isError: true }
+      if (value === null) return { text: '', isError: false }
       if (typeof value === 'boolean') return { text: value ? 'TRUE' : 'FALSE', isError: false }
       return { text: String(value), isError: false }
     },
-    set(position: CellPosition, raw: string): boolean {
-      const key = keyOf(position)
-      if ((cells.get(key) ?? '') === raw) return false
-
-      if (raw === '') cells.delete(key)
-      else cells.set(key, raw)
-
-      return true
+    set(position: CellPosition, raw: string): readonly CellPosition[] {
+      const result = engine.setCell(addressOf(position), raw)
+      return result.changed.flatMap((address) => {
+        const changedPosition = positionOf(address)
+        return changedPosition === null ? [] : [changedPosition]
+      })
     },
   }
 }
