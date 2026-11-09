@@ -24,6 +24,7 @@ THIRD_PARTY_APPS = [
     "rest_framework",
 ]
 LOCAL_APPS = [
+    "apps.ai.apps.AiConfig",
     "apps.common.apps.CommonConfig",
     "apps.spreadsheets.apps.SpreadsheetsConfig",
     "apps.users.apps.UsersConfig",
@@ -79,6 +80,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 AUTH_USER_MODEL = "users.User"
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+AI_MODEL = env("AI_MODEL", default="gemini-2.5-flash-lite")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

@@ -94,3 +94,30 @@ uv run python manage.py check --deploy --settings=config.settings.production
 
 Production must set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
 `DATABASE_URL`, and `GOOGLE_OAUTH_CLIENT_ID`.
+
+## AI formula suggestions
+
+Create a Gemini API key in Google AI Studio and set `GEMINI_API_KEY` in the
+backend environment. This is a separate credential from the Google sign-in
+OAuth client ID. The default model is `gemini-2.5-flash-lite`; override it with
+`AI_MODEL` if needed. The key never belongs in the frontend.
+
+Authenticated clients can request a suggestion without changing the sheet:
+
+```text
+POST /api/v1/ai/formula-suggestion/
+```
+
+```json
+{
+  "sheetId": "sheet-uuid",
+  "instruction": "Sum column A",
+  "contextCells": [{"row": 0, "column": 0}]
+}
+```
+
+The response contains `formula` and `explanation`. Only the requested cell
+coordinates (up to 20) are sent as context. The user must review and insert
+the suggestion; this endpoint does not save or execute it. Provider requests
+are isolated in `apps/ai/providers/` so key selection and rate policies can be
+added without changing this API.
