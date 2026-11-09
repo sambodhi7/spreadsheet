@@ -6,6 +6,7 @@ required_settings = {
     "DJANGO_SECRET_KEY": SECRET_KEY,  # noqa: F405
     "DJANGO_ALLOWED_HOSTS": ALLOWED_HOSTS,  # noqa: F405
     "DATABASE_URL": env("DATABASE_URL", default=""),  # noqa: F405
+    "GOOGLE_OAUTH_CLIENT_ID": GOOGLE_OAUTH_CLIENT_ID,  # noqa: F405
 }
 missing = [name for name, value in required_settings.items() if not value]
 if missing:
