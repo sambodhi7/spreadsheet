@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from .errors import RevisionConflict, SpreadsheetDomainError
@@ -48,17 +48,16 @@ def create_sheet(*, workbook: Workbook, name: str | None = None) -> Sheet:
 
 @transaction.atomic
 def update_sheet(*, sheet: Sheet, name: str) -> Sheet:
-    locked = Sheet.objects.select_for_update().select_related("workbook").get(id=sheet.id)
+    workbook = Workbook.objects.select_for_update().get(id=sheet.workbook_id)
+    locked = Sheet.objects.select_for_update().get(id=sheet.id)
     if locked.workbook.sheets.exclude(id=locked.id).filter(name=name).exists():
         raise SpreadsheetDomainError("A sheet with this name already exists.", "duplicate_name")
 
     locked.name = name
     locked.revision += 1
     locked.save(update_fields=("name", "revision", "updated_at"))
-    Workbook.objects.filter(id=locked.workbook_id).update(
-        revision=locked.workbook.revision + 1,
-        updated_at=timezone.now(),
-    )
+    workbook.revision += 1
+    workbook.save(update_fields=("revision", "updated_at"))
     return locked
 
 
@@ -86,11 +85,11 @@ def _is_default_cell(cell: Cell) -> bool:
 
 @transaction.atomic
 def apply_cell_changes(*, sheet: Sheet, base_revision: int, changes: list[dict]) -> dict:
+    workbook = Workbook.objects.select_for_update().get(id=sheet.workbook_id)
     locked_sheet = Sheet.objects.select_for_update().get(id=sheet.id)
     if locked_sheet.revision != base_revision:
         raise RevisionConflict(locked_sheet.revision)
 
-    workbook = Workbook.objects.select_for_update().get(id=locked_sheet.workbook_id)
     coordinates = [(change["row"], change["column"]) for change in changes]
     for row, column in coordinates:
         if row >= locked_sheet.row_count or column >= locked_sheet.column_count:
@@ -99,14 +98,19 @@ def apply_cell_changes(*, sheet: Sheet, base_revision: int, changes: list[dict])
                 "cell_out_of_bounds",
             )
 
-    rows = {row for row, _ in coordinates}
-    columns = {column for _, column in coordinates}
+    columns_by_row: dict[int, set[int]] = {}
+    for row, column in coordinates:
+        columns_by_row.setdefault(row, set()).add(column)
+    coordinate_query = Q()
+    for row, columns in columns_by_row.items():
+        coordinate_query |= Q(row=row, column__in=columns)
+
     existing = {
         (cell.row, cell.column): cell
         for cell in Cell.objects.filter(
             sheet=locked_sheet,
-            row__in=rows,
-            column__in=columns,
+        ).filter(
+            coordinate_query,
         )
     }
 

@@ -43,6 +43,45 @@ as the external identity; email is profile data, not the identity key.
 - `Cell` stores sparse raw inputs and formatting. Computed values are derived
   by the TypeScript spreadsheet engine and are not persisted.
 
+## Spreadsheet API
+
+All spreadsheet endpoints require an authenticated Django session.
+
+```text
+GET    /api/v1/workbooks/
+POST   /api/v1/workbooks/
+GET    /api/v1/workbooks/{workbookId}/
+PATCH  /api/v1/workbooks/{workbookId}/
+DELETE /api/v1/workbooks/{workbookId}/
+POST   /api/v1/workbooks/{workbookId}/sheets/
+PATCH  /api/v1/sheets/{sheetId}/
+DELETE /api/v1/sheets/{sheetId}/
+GET    /api/v1/sheets/{sheetId}/snapshot/
+PATCH  /api/v1/sheets/{sheetId}/cells/
+```
+
+Cell saves are atomic batches of at most 500 unique coordinates:
+
+```json
+{
+  "baseRevision": 3,
+  "changes": [
+    {
+      "row": 0,
+      "column": 0,
+      "raw": "=B1+10",
+      "format": {
+        "textColor": "#1e293b",
+        "backgroundColor": "#ffffff",
+        "markdown": false
+      }
+    }
+  ]
+}
+```
+
+A stale `baseRevision` returns HTTP 409 with the current sheet revision.
+
 ## Quality checks
 
 ```powershell

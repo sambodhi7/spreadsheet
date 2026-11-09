@@ -90,7 +90,7 @@ class CellChangeSerializer(serializers.Serializer):
 
 class BulkCellChangeSerializer(serializers.Serializer):
     baseRevision = serializers.IntegerField(source="base_revision", min_value=0)
-    changes = CellChangeSerializer(many=True, allow_empty=False, max_length=1_000)
+    changes = CellChangeSerializer(many=True, allow_empty=False, max_length=500)
 
     def validate_changes(self, changes):
         coordinates = [(change["row"], change["column"]) for change in changes]
