@@ -1,4 +1,4 @@
-import { parseCellAddress } from './address.js'
+import { expandRange, parseCellAddress, type GridLimits } from './address.js'
 import type { AstNode, BinaryOperator, CallNode } from './ast.js'
 import { toBoolean, toNumber } from './coercion.js'
 import {
@@ -6,15 +6,32 @@ import {
   resolveFunction,
   validateFunctionArity,
 } from './functions/registry.js'
-import { isSpreadsheetError, type CellValue, type ScalarValue, type SpreadsheetError } from './values.js'
+import {
+  isRangeValue,
+  isSpreadsheetError,
+  type CellValue,
+  type FunctionValue,
+  type RangeValue,
+  type ScalarValue,
+  type SpreadsheetError,
+} from './values.js'
 import { parseFormula } from './parser.js'
 
 export interface EvaluationContext {
+  readonly limits?: GridLimits
   readonly resolveCell: (address: string) => CellValue
 }
 
+type EvaluationValue = CellValue | RangeValue
+
 function spreadsheetError(error: SpreadsheetError['error'], message?: string, position?: number): SpreadsheetError {
   return { error, ...(message === undefined ? {} : { message }), ...(position === undefined ? {} : { position }) }
+}
+
+function requireScalar(value: EvaluationValue): CellValue {
+  return isRangeValue(value)
+    ? spreadsheetError('#VALUE!', 'A range cannot be used as a scalar value')
+    : value
 }
 
 type ComparisonOperator = Extract<BinaryOperator, '=' | '<>' | '<' | '<=' | '>' | '>='>
@@ -90,17 +107,19 @@ function evaluateLazyFunction(node: CallNode, context?: EvaluationContext): Cell
   const normalizedName = node.name.toUpperCase()
 
   if (normalizedName === 'IF') {
-    const condition = evaluateAst(node.arguments[0]!, context)
+    const condition = requireScalar(evaluateNode(node.arguments[0]!, context))
     if (isSpreadsheetError(condition)) return condition
     const logicalCondition = toBoolean(condition)
     if (isSpreadsheetError(logicalCondition)) return logicalCondition
 
-    if (logicalCondition) return evaluateAst(node.arguments[1]!, context)
-    return node.arguments[2] === undefined ? false : evaluateAst(node.arguments[2], context)
+    if (logicalCondition) return requireScalar(evaluateNode(node.arguments[1]!, context))
+    return node.arguments[2] === undefined ? false : requireScalar(evaluateNode(node.arguments[2], context))
   }
 
-  const value = evaluateAst(node.arguments[0]!, context)
-  return isSpreadsheetError(value) ? evaluateAst(node.arguments[1]!, context) : value
+  const value = requireScalar(evaluateNode(node.arguments[0]!, context))
+  return isSpreadsheetError(value)
+    ? requireScalar(evaluateNode(node.arguments[1]!, context))
+    : value
 }
 
 function evaluateCall(node: CallNode, context?: EvaluationContext): CellValue {
@@ -111,41 +130,65 @@ function evaluateCall(node: CallNode, context?: EvaluationContext): CellValue {
   if (arityError !== null) return arityError
   if (definition.mode === 'lazy') return evaluateLazyFunction(node, context)
 
-  const arguments_: ScalarValue[] = []
+  const arguments_: FunctionValue[] = []
   for (const argumentNode of node.arguments) {
-    const argument = evaluateAst(argumentNode, context)
+    const argument = evaluateNode(argumentNode, context)
     if (isSpreadsheetError(argument)) return argument
     arguments_.push(argument)
   }
   return evaluateEagerFunction(node.name, definition, arguments_)
 }
 
-export function evaluateAst(node: AstNode, context?: EvaluationContext): CellValue {
+function evaluateNode(node: AstNode, context?: EvaluationContext): EvaluationValue {
   if (node.kind === 'number') return node.value
   if (node.kind === 'boolean') return node.value
 
   if (node.kind === 'cellReference') {
-    const parsedAddress = parseCellAddress(node.reference)
+    const parsedAddress = parseCellAddress(node.reference, context?.limits)
     if (!parsedAddress.ok) return spreadsheetError('#REF!', parsedAddress.message)
     if (context === undefined) return spreadsheetError('#REF!', 'Cell reference requires a spreadsheet context')
     return context.resolveCell(parsedAddress.value.address)
   }
 
+  if (node.kind === 'range') {
+    if (context === undefined) return spreadsheetError('#REF!', 'Range requires a spreadsheet context')
+    const expanded = expandRange(
+      node.rangeKind,
+      node.startReference,
+      node.endReference,
+      context.limits,
+    )
+    if (!expanded.ok) return spreadsheetError('#REF!', expanded.message)
+    return {
+      kind: 'range',
+      values: expanded.value.addresses.map(context.resolveCell),
+      width: expanded.value.width,
+      height: expanded.value.height,
+    }
+  }
+
   if (node.kind === 'call') return evaluateCall(node, context)
 
   if (node.kind === 'unary') {
-    const operand = evaluateAst(node.operand, context)
+    const operand = evaluateNode(node.operand, context)
     if (isSpreadsheetError(operand)) return operand
+    if (isRangeValue(operand)) return spreadsheetError('#VALUE!', 'A range cannot be used with a unary operator')
     const number = toNumber(operand)
     if (isSpreadsheetError(number)) return number
     return node.operator === '-' ? -number : number
   }
 
-  const left = evaluateAst(node.left, context)
+  const left = evaluateNode(node.left, context)
   if (isSpreadsheetError(left)) return left
-  const right = evaluateAst(node.right, context)
+  if (isRangeValue(left)) return spreadsheetError('#VALUE!', 'A range cannot be used with a binary operator')
+  const right = evaluateNode(node.right, context)
   if (isSpreadsheetError(right)) return right
+  if (isRangeValue(right)) return spreadsheetError('#VALUE!', 'A range cannot be used with a binary operator')
   return calculate(node.operator, left, right)
+}
+
+export function evaluateAst(node: AstNode, context?: EvaluationContext): CellValue {
+  return requireScalar(evaluateNode(node, context))
 }
 
 export function evaluateFormula(source: string, context?: EvaluationContext): CellValue {

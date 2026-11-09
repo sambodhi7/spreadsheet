@@ -18,6 +18,13 @@ export interface CellReferenceNode extends SourceSpan {
   readonly reference: string
 }
 
+export interface RangeNode extends SourceSpan {
+  readonly kind: 'range'
+  readonly rangeKind: 'cells' | 'columns'
+  readonly startReference: string
+  readonly endReference: string
+}
+
 export interface UnaryNode extends SourceSpan {
   readonly kind: 'unary'
   readonly operator: '+' | '-'
@@ -39,4 +46,4 @@ export interface CallNode extends SourceSpan {
   readonly arguments: readonly AstNode[]
 }
 
-export type AstNode = NumberNode | BooleanNode | CellReferenceNode | UnaryNode | BinaryNode | CallNode
+export type AstNode = NumberNode | BooleanNode | CellReferenceNode | RangeNode | UnaryNode | BinaryNode | CallNode

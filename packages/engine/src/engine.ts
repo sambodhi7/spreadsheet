@@ -1,10 +1,16 @@
 import { parseCellAddress, type GridLimits, DEFAULT_GRID_LIMITS } from './address.js'
+import type { AstNode } from './ast.js'
 import { classifyInput } from './classify.js'
-import { evaluateFormula } from './evaluator.js'
+import { findCyclicCells } from './cycles.js'
+import { extractReferences } from './dependencies.js'
+import { evaluateAst } from './evaluator.js'
+import { DependencyGraph } from './graph.js'
+import { parseFormula } from './parser.js'
 import { isSpreadsheetError, type CellValue, type SpreadsheetError } from './values.js'
 
 export interface SetCellResult {
   readonly changed: readonly string[]
+  readonly recalculated: readonly string[]
   readonly error?: SpreadsheetError
 }
 
@@ -27,6 +33,9 @@ export class SpreadsheetEngine {
   readonly limits: Readonly<GridLimits>
   private readonly rawCells = new Map<string, string>()
   private readonly values = new Map<string, CellValue>()
+  private readonly formulaAsts = new Map<string, AstNode>()
+  private readonly formulaErrors = new Map<string, SpreadsheetError>()
+  private readonly graph = new DependencyGraph()
 
   constructor(limits: GridLimits = DEFAULT_GRID_LIMITS) {
     this.limits = { ...limits }
@@ -34,16 +43,36 @@ export class SpreadsheetEngine {
 
   setCell(addressInput: string, raw: string): SetCellResult {
     const parsedAddress = parseCellAddress(addressInput, this.limits)
-    if (!parsedAddress.ok) return { changed: [], error: referenceError(parsedAddress.message) }
+    if (!parsedAddress.ok) return { changed: [], recalculated: [], error: referenceError(parsedAddress.message) }
 
     const address = parsedAddress.value.address
     const previousRaw = this.rawCells.get(address) ?? ''
-    if (previousRaw === raw) return { changed: [] }
+    if (previousRaw === raw) return { changed: [], recalculated: [] }
 
-    if (classifyInput(raw).kind === 'empty') this.rawCells.delete(address)
+    const classified = classifyInput(raw)
+    if (classified.kind === 'empty') this.rawCells.delete(address)
     else this.rawCells.set(address, raw)
 
-    return { changed: this.recalculate(address) }
+    this.updateFormulaState(address, classified)
+
+    const affected = this.graph.collectAffected(address)
+    const previousValues = new Map<string, CellValue>()
+    for (const affectedAddress of affected) {
+      previousValues.set(affectedAddress, this.values.get(affectedAddress) ?? null)
+      this.values.delete(affectedAddress)
+    }
+
+    for (const cyclicAddress of findCyclicCells(this.graph, affected)) {
+      this.values.set(cyclicAddress, cycleError(cyclicAddress))
+    }
+    for (const affectedAddress of affected) this.evaluateCell(affectedAddress, new Set())
+
+    const changed = [...affected].filter((affectedAddress) => {
+      const previous = previousValues.get(affectedAddress) ?? null
+      const current = this.values.get(affectedAddress) ?? null
+      return affectedAddress === address || !valuesEqual(previous, current)
+    })
+    return { changed, recalculated: [...affected] }
   }
 
   getRaw(addressInput: string): string {
@@ -61,25 +90,48 @@ export class SpreadsheetEngine {
     return new Map(this.rawCells)
   }
 
+  getPrecedents(addressInput: string): ReadonlySet<string> {
+    const parsedAddress = parseCellAddress(addressInput, this.limits)
+    return parsedAddress.ok ? this.graph.getPrecedents(parsedAddress.value.address) : new Set()
+  }
+
+  getDependents(addressInput: string): ReadonlySet<string> {
+    const parsedAddress = parseCellAddress(addressInput, this.limits)
+    return parsedAddress.ok ? this.graph.getDependents(parsedAddress.value.address) : new Set()
+  }
+
   clear(): readonly string[] {
     const changed = [...this.rawCells.keys()]
     this.rawCells.clear()
     this.values.clear()
+    this.formulaAsts.clear()
+    this.formulaErrors.clear()
+    this.graph.clear()
     return changed
   }
 
-  private recalculate(editedAddress: string): readonly string[] {
-    const previousValues = new Map(this.values)
-    this.values.clear()
+  private updateFormulaState(address: string, classified: ReturnType<typeof classifyInput>): void {
+    this.formulaAsts.delete(address)
+    this.formulaErrors.delete(address)
 
-    for (const address of this.rawCells.keys()) this.evaluateCell(address, new Set())
+    if (classified.kind !== 'formula') {
+      this.graph.updatePrecedents(address, new Set())
+      return
+    }
 
-    const candidates = new Set([...previousValues.keys(), ...this.values.keys(), editedAddress])
-    return [...candidates].filter((address) => {
-      const previous = previousValues.get(address) ?? null
-      const current = this.values.get(address) ?? null
-      return address === editedAddress || !valuesEqual(previous, current)
-    })
+    const parsed = parseFormula(classified.source)
+    if (!parsed.ok) {
+      this.formulaErrors.set(address, {
+        error: '#PARSE!',
+        message: parsed.diagnostic.message,
+        position: parsed.diagnostic.position,
+      })
+      this.graph.updatePrecedents(address, new Set())
+      return
+    }
+
+    this.formulaAsts.set(address, parsed.ast)
+    this.graph.updatePrecedents(address, extractReferences(parsed.ast, this.limits))
   }
 
   private evaluateCell(address: string, visiting: Set<string>): CellValue {
@@ -96,7 +148,12 @@ export class SpreadsheetEngine {
     if (classified.kind === 'empty') value = null
     else if (classified.kind === 'literal') value = classified.value
     else {
-      value = evaluateFormula(classified.source, {
+      const formulaError = this.formulaErrors.get(address)
+      const ast = this.formulaAsts.get(address)
+      if (formulaError !== undefined) value = formulaError
+      else if (ast === undefined) value = { error: '#PARSE!', message: 'Formula AST is unavailable' }
+      else value = evaluateAst(ast, {
+        limits: this.limits,
         resolveCell: (referencedAddress) => this.evaluateCell(referencedAddress, visiting),
       })
     }

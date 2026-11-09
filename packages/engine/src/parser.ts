@@ -88,6 +88,29 @@ const actions: ActionDict<AstNode> = {
       end: this.source.endIdx,
     }
   },
+  Primary_range(value) {
+    return astOf(value)
+  },
+  Range_cells(startReference, _colon, endReference) {
+    return {
+      kind: 'range',
+      rangeKind: 'cells',
+      startReference: startReference.sourceString,
+      endReference: endReference.sourceString,
+      start: this.source.startIdx,
+      end: this.source.endIdx,
+    }
+  },
+  Range_columns(startReference, _colon, endReference) {
+    return {
+      kind: 'range',
+      rangeKind: 'columns',
+      startReference: startReference.sourceString,
+      endReference: endReference.sourceString,
+      start: this.source.startIdx,
+      end: this.source.endIdx,
+    }
+  },
   Primary_paren(_open, expression, _close) {
     return astOf(expression)
   },

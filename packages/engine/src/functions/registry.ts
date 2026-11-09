@@ -1,5 +1,12 @@
 import { toBoolean, toNumber } from '../coercion.js'
-import { isSpreadsheetError, type CellValue, type ScalarValue, type SpreadsheetError } from '../values.js'
+import {
+  isRangeValue,
+  isSpreadsheetError,
+  type CellValue,
+  type FunctionValue,
+  type ScalarValue,
+  type SpreadsheetError,
+} from '../values.js'
 
 interface BaseFunctionDefinition {
   readonly minArgs: number
@@ -8,7 +15,7 @@ interface BaseFunctionDefinition {
 
 export interface EagerFunctionDefinition extends BaseFunctionDefinition {
   readonly mode: 'eager'
-  readonly evaluate: (arguments_: readonly ScalarValue[]) => CellValue
+  readonly evaluate: (arguments_: readonly FunctionValue[]) => CellValue
 }
 
 export interface LazyFunctionDefinition extends BaseFunctionDefinition {
@@ -21,9 +28,10 @@ function error(errorCode: SpreadsheetError['error'], message: string): Spreadshe
   return { error: errorCode, message }
 }
 
-function numericArguments(arguments_: readonly ScalarValue[]): readonly number[] | SpreadsheetError {
+function scalarNumericArguments(arguments_: readonly FunctionValue[]): readonly number[] | SpreadsheetError {
   const numbers: number[] = []
   for (const argument of arguments_) {
+    if (isRangeValue(argument)) return error('#VALUE!', 'This function requires scalar arguments')
     const number = toNumber(argument)
     if (isSpreadsheetError(number)) return number
     numbers.push(number)
@@ -31,9 +39,34 @@ function numericArguments(arguments_: readonly ScalarValue[]): readonly number[]
   return numbers
 }
 
-function numericFunction(evaluate: (values: readonly number[]) => CellValue): EagerFunctionDefinition['evaluate'] {
+function aggregateNumericArguments(arguments_: readonly FunctionValue[]): readonly number[] | SpreadsheetError {
+  const numbers: number[] = []
+  for (const argument of arguments_) {
+    if (!isRangeValue(argument)) {
+      const number = toNumber(argument)
+      if (isSpreadsheetError(number)) return number
+      numbers.push(number)
+      continue
+    }
+
+    for (const value of argument.values) {
+      if (isSpreadsheetError(value)) return value
+      if (typeof value === 'number') numbers.push(value)
+    }
+  }
+  return numbers
+}
+
+function scalarNumericFunction(evaluate: (values: readonly number[]) => CellValue): EagerFunctionDefinition['evaluate'] {
   return (arguments_) => {
-    const numbers = numericArguments(arguments_)
+    const numbers = scalarNumericArguments(arguments_)
+    return isSpreadsheetError(numbers) ? numbers : evaluate(numbers)
+  }
+}
+
+function aggregateNumericFunction(evaluate: (values: readonly number[]) => CellValue): EagerFunctionDefinition['evaluate'] {
+  return (arguments_) => {
+    const numbers = aggregateNumericArguments(arguments_)
     return isSpreadsheetError(numbers) ? numbers : evaluate(numbers)
   }
 }
@@ -67,41 +100,69 @@ function squareRoot(value: number): CellValue {
     : Math.sqrt(value)
 }
 
-function logicalEvery(arguments_: readonly ScalarValue[]): CellValue {
+function logicalEvery(arguments_: readonly FunctionValue[]): CellValue {
+  let result = true
   for (const argument of arguments_) {
-    const logical = toBoolean(argument)
-    if (isSpreadsheetError(logical)) return logical
-    if (!logical) return false
+    const values: readonly CellValue[] = isRangeValue(argument) ? argument.values : [argument]
+    for (const value of values) {
+      if (isSpreadsheetError(value)) return value
+      if (isRangeValue(argument) && (typeof value === 'string' || value === null)) continue
+      const logical = toBoolean(value as ScalarValue)
+      if (isSpreadsheetError(logical)) return logical
+      if (!logical) result = false
+    }
   }
-  return true
+  return result
 }
 
-function logicalSome(arguments_: readonly ScalarValue[]): CellValue {
+function logicalSome(arguments_: readonly FunctionValue[]): CellValue {
+  let result = false
   for (const argument of arguments_) {
-    const logical = toBoolean(argument)
-    if (isSpreadsheetError(logical)) return logical
-    if (logical) return true
+    const values: readonly CellValue[] = isRangeValue(argument) ? argument.values : [argument]
+    for (const value of values) {
+      if (isSpreadsheetError(value)) return value
+      if (isRangeValue(argument) && (typeof value === 'string' || value === null)) continue
+      const logical = toBoolean(value as ScalarValue)
+      if (isSpreadsheetError(logical)) return logical
+      if (logical) result = true
+    }
   }
-  return false
+  return result
+}
+
+function countNumericValues(arguments_: readonly FunctionValue[]): CellValue {
+  let count = 0
+  for (const argument of arguments_) {
+    if (!isRangeValue(argument)) {
+      if (typeof argument === 'number') count += 1
+      continue
+    }
+    for (const value of argument.values) {
+      if (isSpreadsheetError(value)) return value
+      if (typeof value === 'number') count += 1
+    }
+  }
+  return count
 }
 
 const definitions: ReadonlyMap<string, FunctionDefinition> = new Map<string, FunctionDefinition>([
-  ['ABS', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: numericFunction(([value = 0]) => Math.abs(value)) }],
-  ['ROUND', { mode: 'eager', minArgs: 1, maxArgs: 2, evaluate: numericFunction(([value = 0, digits = 0]) => roundHalfAwayFromZero(value, digits)) }],
+  ['ABS', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: scalarNumericFunction(([value = 0]) => Math.abs(value)) }],
+  ['ROUND', { mode: 'eager', minArgs: 1, maxArgs: 2, evaluate: scalarNumericFunction(([value = 0, digits = 0]) => roundHalfAwayFromZero(value, digits)) }],
   ['NOT', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: ([value = 0]) => {
+    if (isRangeValue(value)) return error('#VALUE!', 'NOT requires a scalar argument')
     const logical = toBoolean(value)
     return isSpreadsheetError(logical) ? logical : !logical
   } }],
   ['AND', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: logicalEvery }],
   ['OR', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: logicalSome }],
-  ['SQRT', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: numericFunction(([value = 0]) => squareRoot(value)) }],
-  ['MOD', { mode: 'eager', minArgs: 2, maxArgs: 2, evaluate: numericFunction(([number = 0, divisor = 0]) => modulo(number, divisor)) }],
-  ['SUM', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: numericFunction((values) => values.reduce((sum, value) => sum + value, 0)) }],
-  ['AVG', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: numericFunction((values) => values.reduce((sum, value) => sum + value, 0) / values.length) }],
-  ['AVERAGE', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: numericFunction((values) => values.reduce((sum, value) => sum + value, 0) / values.length) }],
-  ['MIN', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: numericFunction((values) => Math.min(...values)) }],
-  ['MAX', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: numericFunction((values) => Math.max(...values)) }],
-  ['COUNT', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: (values) => values.filter((value) => typeof value === 'number').length }],
+  ['SQRT', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: scalarNumericFunction(([value = 0]) => squareRoot(value)) }],
+  ['MOD', { mode: 'eager', minArgs: 2, maxArgs: 2, evaluate: scalarNumericFunction(([number = 0, divisor = 0]) => modulo(number, divisor)) }],
+  ['SUM', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.reduce((sum, value) => sum + value, 0)) }],
+  ['AVG', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? error('#DIV/0!', 'AVG has no numeric values') : values.reduce((sum, value) => sum + value, 0) / values.length) }],
+  ['AVERAGE', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? error('#DIV/0!', 'AVERAGE has no numeric values') : values.reduce((sum, value) => sum + value, 0) / values.length) }],
+  ['MIN', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? 0 : Math.min(...values)) }],
+  ['MAX', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? 0 : Math.max(...values)) }],
+  ['COUNT', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: countNumericValues }],
   ['IF', { mode: 'lazy', minArgs: 2, maxArgs: 3 }],
   ['IFERROR', { mode: 'lazy', minArgs: 2, maxArgs: 2 }],
 ])
@@ -122,7 +183,7 @@ export function validateFunctionArity(
 export function evaluateEagerFunction(
   name: string,
   definition: EagerFunctionDefinition,
-  arguments_: readonly ScalarValue[],
+  arguments_: readonly FunctionValue[],
 ): CellValue {
   const result = definition.evaluate(arguments_)
   if (typeof result === 'number' && !Number.isFinite(result)) {

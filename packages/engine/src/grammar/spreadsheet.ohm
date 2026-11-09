@@ -1,4 +1,4 @@
-ArithmeticFormula {
+SpreadsheetFormula {
   Formula = "=" Expression end
   Expression = Comparison
   Comparison = Additive (comparisonOp Additive)*
@@ -7,7 +7,8 @@ ArithmeticFormula {
   Power = Unary (powerOp Unary)*
   Unary = unaryOp Unary  -- op
         | Primary
-  Primary = cellReference       -- cellReference
+  Primary = Range               -- range
+          | cellReference       -- cellReference
           | Call                -- call
           | boolean             -- boolean
           | number              -- number
@@ -16,6 +17,8 @@ ArithmeticFormula {
   Call = identifier "(" ArgumentList? ")"
   ArgumentList = Expression ("," Expression)*
   identifier = letter alnum*
+  Range = cellReference ":" cellReference  -- cells
+        | columnReference ":" columnReference  -- columns
 
   addOp = "+" | "-"
   multiplyOp = "*" | "/"
@@ -25,6 +28,7 @@ ArithmeticFormula {
 
   boolean = (caseInsensitive<"true"> | caseInsensitive<"false">) ~alnum
   cellReference = "$"? letter+ "$"? digit+ ~alnum
+  columnReference = "$"? letter+ ~alnum
 
   number = leadingDotNumber | wholeNumber
   leadingDotNumber = "." digit+ exponent?
