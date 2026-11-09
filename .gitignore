@@ -4,3 +4,15 @@
 # Workspace dependencies and package build output
 node_modules/
 /packages/*/dist/
+
+# Python / Django
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+/backend/.env
+/backend/db.sqlite3
+/backend/staticfiles/
