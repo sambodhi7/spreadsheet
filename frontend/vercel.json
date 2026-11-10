@@ -4,6 +4,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://spreadsheet-sambodhi-api.vercel.app/api/:path*"
+    },
+    {
+      "source": "/workbooks/:path*",
+      "destination": "/index.html"
     }
   ]
 }
