@@ -17,3 +17,5 @@ htmlcov/
 /backend/db.sqlite3
 /backend/staticfiles/
 /frontend/.env.local
+.neon
+.env.local
