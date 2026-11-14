@@ -168,12 +168,24 @@ describe('SpreadsheetEngine ranges', () => {
     engine.setCell('B3', '=MIN(A1:A3)')
     engine.setCell('B4', '=MAX(A1:A3)')
     engine.setCell('B5', '=COUNT(A1:A3)')
+    engine.setCell('B6', '=MEDIAN(A1:A3, 10)')
 
     expect(engine.getValue('B1')).toBe(10)
     expect(engine.getValue('B2')).toBe(2)
     expect(engine.getValue('B3')).toBe(1)
     expect(engine.getValue('B4')).toBe(3)
     expect(engine.getValue('B5')).toBe(3)
+    expect(engine.getValue('B6')).toBe(2.5)
+  })
+
+  it('concatenates text, numbers, booleans, and empty cells from ranges', () => {
+    const engine = new SpreadsheetEngine()
+    engine.setCell('A1', 'Hello')
+    engine.setCell('A2', '42')
+    engine.setCell('A3', 'TRUE')
+    engine.setCell('B1', '=CONCAT(A1:A4, "!")')
+
+    expect(engine.getValue('B1')).toBe('Hello42TRUE!')
   })
 
   it('supports rectangular and reversed ranges', () => {

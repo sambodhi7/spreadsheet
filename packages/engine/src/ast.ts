@@ -13,6 +13,11 @@ export interface BooleanNode extends SourceSpan {
   readonly value: boolean
 }
 
+export interface StringNode extends SourceSpan {
+  readonly kind: 'string'
+  readonly value: string
+}
+
 export interface CellReferenceNode extends SourceSpan {
   readonly kind: 'cellReference'
   readonly reference: string
@@ -46,4 +51,4 @@ export interface CallNode extends SourceSpan {
   readonly arguments: readonly AstNode[]
 }
 
-export type AstNode = NumberNode | BooleanNode | CellReferenceNode | RangeNode | UnaryNode | BinaryNode | CallNode
+export type AstNode = NumberNode | BooleanNode | StringNode | CellReferenceNode | RangeNode | UnaryNode | BinaryNode | CallNode

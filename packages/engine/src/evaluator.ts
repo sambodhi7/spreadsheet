@@ -142,6 +142,7 @@ function evaluateCall(node: CallNode, context?: EvaluationContext): CellValue {
 function evaluateNode(node: AstNode, context?: EvaluationContext): EvaluationValue {
   if (node.kind === 'number') return node.value
   if (node.kind === 'boolean') return node.value
+  if (node.kind === 'string') return node.value
 
   if (node.kind === 'cellReference') {
     const parsedAddress = parseCellAddress(node.reference, context?.limits)

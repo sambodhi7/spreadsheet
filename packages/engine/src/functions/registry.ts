@@ -71,6 +71,49 @@ function aggregateNumericFunction(evaluate: (values: readonly number[]) => CellV
   }
 }
 
+function scalarText(value: FunctionValue, functionName: string): string | SpreadsheetError {
+  if (isRangeValue(value)) return error('#VALUE!', `${functionName} requires a scalar argument`)
+  if (value === null) return ''
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
+  return String(value)
+}
+
+function logarithm(number: number, base: number): CellValue {
+  if (number <= 0) return error('#NUM!', 'LOG requires a positive number')
+  if (base <= 0 || base === 1) return error('#NUM!', 'LOG requires a positive base other than 1')
+  const result = Math.log(number) / Math.log(base)
+  return Number.isFinite(result) ? result : error('#NUM!', 'LOG produced a non-finite number')
+}
+
+function naturalLogarithm(number: number): CellValue {
+  return number <= 0
+    ? error('#NUM!', 'LN requires a positive number')
+    : Math.log(number)
+}
+
+function median(values: readonly number[]): CellValue {
+  if (values.length === 0) return error('#NUM!', 'MEDIAN has no numeric values')
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1]! + sorted[middle]!) / 2
+    : sorted[middle]!
+}
+
+function concatenate(arguments_: readonly FunctionValue[]): CellValue {
+  let result = ''
+  for (const argument of arguments_) {
+    const values: readonly CellValue[] = isRangeValue(argument) ? argument.values : [argument]
+    for (const value of values) {
+      if (isSpreadsheetError(value)) return value
+      const text = scalarText(value, 'CONCAT')
+      if (isSpreadsheetError(text)) return text
+      result += text
+    }
+  }
+  return result
+}
+
 function roundHalfAwayFromZero(value: number, digits = 0): CellValue {
   if (!Number.isInteger(digits)) return error('#VALUE!', 'ROUND digits must be an integer')
   if (Math.abs(digits) > 308) return error('#NUM!', 'ROUND digits are outside the supported range')
@@ -163,6 +206,23 @@ const definitions: ReadonlyMap<string, FunctionDefinition> = new Map<string, Fun
   ['MIN', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? 0 : Math.min(...values)) }],
   ['MAX', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction((values) => values.length === 0 ? 0 : Math.max(...values)) }],
   ['COUNT', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: countNumericValues }],
+  ['MEDIAN', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: aggregateNumericFunction(median) }],
+  ['POWER', { mode: 'eager', minArgs: 2, maxArgs: 2, evaluate: scalarNumericFunction(([number = 0, exponent = 0]) => number ** exponent) }],
+  ['LOG', { mode: 'eager', minArgs: 1, maxArgs: 2, evaluate: scalarNumericFunction(([number = 0, base = 10]) => logarithm(number, base)) }],
+  ['LN', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: scalarNumericFunction(([number = 0]) => naturalLogarithm(number)) }],
+  ['LEN', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: ([value = null]) => {
+    const text = scalarText(value, 'LEN')
+    return isSpreadsheetError(text) ? text : text.length
+  } }],
+  ['UPPER', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: ([value = null]) => {
+    const text = scalarText(value, 'UPPER')
+    return isSpreadsheetError(text) ? text : text.toUpperCase()
+  } }],
+  ['LOWER', { mode: 'eager', minArgs: 1, maxArgs: 1, evaluate: ([value = null]) => {
+    const text = scalarText(value, 'LOWER')
+    return isSpreadsheetError(text) ? text : text.toLowerCase()
+  } }],
+  ['CONCAT', { mode: 'eager', minArgs: 1, maxArgs: Number.POSITIVE_INFINITY, evaluate: concatenate }],
   ['IF', { mode: 'lazy', minArgs: 2, maxArgs: 3 }],
   ['IFERROR', { mode: 'lazy', minArgs: 2, maxArgs: 2 }],
 ])

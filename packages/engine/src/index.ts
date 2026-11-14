@@ -22,6 +22,7 @@ export type {
   NumberNode,
   RangeNode,
   SourceSpan,
+  StringNode,
   UnaryNode,
 } from './ast.js'
 export { classifyInput, type ClassifiedInput } from './classify.js'

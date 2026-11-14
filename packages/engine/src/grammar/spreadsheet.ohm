@@ -11,6 +11,7 @@ SpreadsheetFormula {
           | cellReference       -- cellReference
           | Call                -- call
           | boolean             -- boolean
+          | string              -- string
           | number              -- number
           | "(" Expression ")" -- paren
 
@@ -27,6 +28,8 @@ SpreadsheetFormula {
   unaryOp = "+" | "-"
 
   boolean = (caseInsensitive<"true"> | caseInsensitive<"false">) ~alnum
+  string = "\"" stringCharacter* "\""
+  stringCharacter = "\"\"" | ~"\"" any
   cellReference = "$"? letter+ "$"? digit+ ~alnum
   columnReference = "$"? letter+ ~alnum
 

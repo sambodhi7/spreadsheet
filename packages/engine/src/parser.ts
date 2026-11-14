@@ -80,6 +80,14 @@ const actions: ActionDict<AstNode> = {
       end: this.source.endIdx,
     }
   },
+  Primary_string(value) {
+    return {
+      kind: 'string',
+      value: value.sourceString.slice(1, -1).replaceAll('""', '"'),
+      start: this.source.startIdx,
+      end: this.source.endIdx,
+    }
+  },
   Primary_cellReference(value) {
     return {
       kind: 'cellReference',

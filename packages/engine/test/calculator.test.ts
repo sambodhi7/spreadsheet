@@ -110,6 +110,36 @@ describe('multiple-argument functions', () => {
   })
 })
 
+describe('additional numeric and text functions', () => {
+  it.each([
+    ['=MEDIAN(7, 1, 4)', 4],
+    ['=MEDIAN(7, 1, 4, 10)', 5.5],
+    ['=POWER(2, 8)', 256],
+    ['=LOG(100)', 2],
+    ['=LOG(8, 2)', 3],
+    ['=LN(1)', 0],
+    ['=LEN("hello")', 5],
+    ['=LEN("say ""hi""")', 8],
+    ['=UPPER("Hello 42")', 'HELLO 42'],
+    ['=LOWER("Hello 42")', 'hello 42'],
+    ['=CONCAT("Hello", " ", "world", 42)', 'Hello world42'],
+  ])('evaluates %s as %s', (formula, expected) => {
+    expect(evaluateFormula(formula)).toBe(expected)
+  })
+
+  it.each([
+    ['=LOG(0)', '#NUM!'],
+    ['=LOG(10, 1)', '#NUM!'],
+    ['=LN(-1)', '#NUM!'],
+    ['=POWER(-1, .5)', '#NUM!'],
+    ['=LEN("a", "b")', '#PARSE!'],
+    ['=CONCAT()', '#PARSE!'],
+  ] as const)('returns %s for %s', (formula, expectedError) => {
+    const result = evaluateFormula(formula)
+    expect(isSpreadsheetError(result) && result.error).toBe(expectedError)
+  })
+})
+
 describe('booleans and comparisons', () => {
   it.each([
     ['=TRUE', true],
